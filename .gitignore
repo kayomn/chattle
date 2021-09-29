@@ -1,0 +1,8 @@
+# Editors
+.idea/
+
+# Caches
+__pycache__/
+
+# Virtual environments
+venv/
