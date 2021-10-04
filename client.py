@@ -3,10 +3,10 @@ __version__ = "0.0.1"
 __status__ = "Development"
 
 if (__name__ == "__main__"):
+    import asyncio
     import chattle
     import config
     import socket
-    import select
     import sys
 
     username = input("username: ")
@@ -15,34 +15,38 @@ if (__name__ == "__main__"):
     print("Starting connection to", address)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        server_socket.setblocking(False)
         server_socket.connect_ex(address)
+        print(server_socket.recv(config.message_max).decode("utf-8"))
 
-        # Input may be written by the user or received from the server. Both cases have to be handled.
-        inputs = [sys.stdin, server_socket]
+        async def listen_server():
+            response_data = server_socket.recv(config.message_max)
 
-        while True:
-            # Listen for input.
-            readable_io, _, _ = select.select(inputs, [], [])
+            while response_data:
+                print(response_data.decode("utf-8"))
 
-            for io in readable_io:
-                if (io == server_socket):
-                    response_data = io.recv(config.message_max)
+                response_data = server_socket.recv(config.message_max)
 
-                    if not response_data:
-                        exit(0)
+        # Listening for server responses has to be done on a separate unit of computation, such as an asynchronous
+        # operation, so as not to block the console from working.
+        asyncio.get_event_loop().create_task(listen_server())
 
-                    print(response_data.decode("utf-8"))
+        is_running = True
 
-                elif (io == sys.stdin):
-                    # Messages produced by this client are written to the terminal locally, rather than sending it to
-                    # server to then receive it back.
-                    line = sys.stdin.readline()
+        while is_running:
+            line = sys.stdin.readline().strip()
 
-                    if not line.startswith("/"):
-                        sys.stdout.write("<You> ")
-                        sys.stdout.write(line)
-                        sys.stdout.flush()
+            if line:
+                # Messages produced by this client are written to the terminal locally, rather than sending it to
+                # server to then receive it back.
+                if not line.startswith("/"):
+                    sys.stdout.write("<You> ")
+                    sys.stdout.write(line)
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
 
-                    server_socket.send(chattle.encode_message(username, line))
+                server_socket.send(chattle.encode_message(username, line))
+
+                if (line.lower() == "/quit"):
+                    # Handle exiting on the client-side.
+                    is_running = False
 
